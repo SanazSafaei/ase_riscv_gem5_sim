@@ -1,6 +1,8 @@
 # Shared helpers for sim.sh / studio.sh (sourced, not executed).
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${ASE_IMAGE:-ase-riscv-gem5:local}"
+# Published multi-arch image (amd64 + arm64). Override with ASE_IMAGE to use another one.
+IMAGE="${ASE_IMAGE:-ghcr.io/sanazsafaei/ase-riscv-gem5:latest}"
+LOCAL_IMAGE="ase-riscv-gem5:local"
 
 # Git Bash on Windows: stop it from rewriting container paths, and use a Windows-style mount path.
 export MSYS_NO_PATHCONV=1
@@ -17,12 +19,14 @@ ensure_image() {
     docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start Docker Desktop and retry."
     [[ -f "$REPO/setup_default" ]] || die "setup_default not found: run this from the ase_riscv_gem5_sim repository."
     docker image inspect "$IMAGE" >/dev/null 2>&1 && return 0
-    # A registry name (contains '/') is pulled; otherwise (or if the pull fails) build locally.
+    # A registry name (contains '/') is pulled; if that fails, fall back to a local build.
     if [[ "$IMAGE" == */* ]]; then
-        echo "Pulling $IMAGE ..."
+        echo "Downloading $IMAGE (one time, about 2 GB) ..."
         docker pull "$IMAGE" && return 0
-        echo "Pull failed; building the image locally instead."
+        echo "Could not download the image; building it locally instead."
+        IMAGE="$LOCAL_IMAGE"
+        docker image inspect "$IMAGE" >/dev/null 2>&1 && return 0
     fi
-    echo "Building the image $IMAGE (one time, can take 1-3 hours) ..."
+    echo "Building the image $IMAGE (one time, can take 3-4 hours) ..."
     docker build -t "$IMAGE" -f "$REPO/docker/Dockerfile" "$REPO" || die "image build failed"
 }

@@ -37,23 +37,23 @@ The `--recurse-submodules` option also downloads ASE Studio. If you forgot it, r
 
 ## 3. Get the Docker image
 
-### 3a. Download a ready-made image (fast, recommended)
+### 3a. Download the ready-made image (automatic, recommended)
 
-If your teacher gave you an image name (for example `ghcr.io/<owner>/ase-riscv-gem5:latest`),
-tell the scripts to use it, then pull it:
+Nothing to do: the first time you run `./studio.sh` or `./sim.sh`, the scripts download
+`ghcr.io/sanazsafaei/ase-riscv-gem5:latest` (about 2 GB). The right build for your computer
+(Intel/AMD or Apple Silicon) is picked automatically. You can also fetch it ahead of time:
 
 ```bash
-export ASE_IMAGE=ghcr.io/<owner>/ase-riscv-gem5:latest      # Windows PowerShell: $env:ASE_IMAGE="..."
-docker pull "$ASE_IMAGE"
+docker pull ghcr.io/sanazsafaei/ase-riscv-gem5:latest
 ```
 
-The correct build for your computer (Intel/AMD or Apple Silicon) is picked automatically.
-You need to set `ASE_IMAGE` in every new terminal, or the scripts will build locally (3b).
+To use a different image, set `ASE_IMAGE` first (macOS/Linux/Git Bash: `export ASE_IMAGE=...`;
+PowerShell: `$env:ASE_IMAGE="..."`).
 
-### 3b. Build it yourself (no image available, takes 1-3 hours, once)
+### 3b. Build it yourself (only if the download is not possible, takes 3-4 hours, once)
 
-Nothing to do: the first time you run `./sim.sh` or `./studio.sh` and no image exists, the
-scripts build it from `docker/Dockerfile`. You can also do it explicitly:
+If the download fails, the scripts build the image from `docker/Dockerfile` automatically.
+You can also do it explicitly (needs about 25 GB of free disk and 8 GB of RAM for Docker):
 
 ```bash
 docker build -t ase-riscv-gem5:local -f docker/Dockerfile .
@@ -113,7 +113,11 @@ docker compose up studio                         # then open http://127.0.0.1:87
 ## For teachers: publishing the image
 
 `.github/workflows/docker-image.yml` builds the image natively for **amd64 and arm64** on GitHub
-and publishes it to `ghcr.io/<owner>/ase-riscv-gem5` (run it from the repository's *Actions*
-tab, "docker-image" → *Run workflow*). After the first run, open the package on GitHub →
-*Package settings* → set visibility to **Public** so students can pull without logging in.
-Then hand students the `ASE_IMAGE=ghcr.io/<owner>/ase-riscv-gem5:latest` line from step 3a.
+(about 3-4 hours) and publishes it to `ghcr.io/<owner>/ase-riscv-gem5`. It runs when you push a
+tag starting with `v` (for example `git tag v1.0 && git push origin v1.0`), or from the
+repository's *Actions* tab → "docker-image" → *Run workflow*.
+
+After the first run, open the package on GitHub (your profile → *Packages* → `ase-riscv-gem5` →
+*Package settings*) and set its visibility to **Public**, otherwise students cannot download it
+without logging in. If you publish under another account, change the default image name in
+`docker/lib.sh` and `compose.yaml`.
