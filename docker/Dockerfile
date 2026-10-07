@@ -30,7 +30,20 @@ WORKDIR /src/riscv-gnu-toolchain
 ARG TOOLCHAIN_JOBS=0
 RUN ./configure --prefix=/opt/riscv --enable-multilib \
     && make -j"$([ "${TOOLCHAIN_JOBS}" -gt 0 ] && echo "${TOOLCHAIN_JOBS}" || nproc)" \
-    && /opt/riscv/bin/riscv64-unknown-elf-gcc --version
+    # Shrink the image: 2.6 GB -> ~0.5 GB. Target libraries lose only debug info; host
+    # binaries (compiler, assembler, linker) are stripped. Order matters: use the unstripped
+    # tool for the target libraries first.
+    && (find /opt/riscv/riscv64-unknown-elf/lib /opt/riscv/lib -name '*.a' \
+         -exec /opt/riscv/bin/riscv64-unknown-elf-strip --strip-debug {} \; 2>/dev/null || true) \
+    && (find /opt/riscv/bin /opt/riscv/libexec /opt/riscv/riscv64-unknown-elf/bin -type f \
+         -exec strip --strip-unneeded {} \; 2>/dev/null || true) \
+    && rm -rf /opt/riscv/share/man /opt/riscv/share/info /opt/riscv/share/doc \
+    # smoke test: the course builds RISC-V assembly with -nostdlib; also link a C program
+    && printf '.globl _start\n_start:\n li a0,0\n li a7,93\n ecall\n' > /tmp/t.s \
+    && /opt/riscv/bin/riscv64-unknown-elf-gcc -O0 -mcmodel=medlow -march=rv32imafd_zicsr_zifencei \
+         -mabi=ilp32 -mno-relax -nostdlib -o /tmp/t.elf /tmp/t.s \
+    && printf 'int main(void){return 0;}\n' > /tmp/t.c \
+    && /opt/riscv/bin/riscv64-unknown-elf-gcc /tmp/t.c -o /tmp/t64
 
 ################################### gem5 ####################################
 FROM ubuntu:22.04 AS gem5-build
@@ -56,7 +69,8 @@ RUN virtualenv -p python3.10 /opt/venv && /opt/venv/bin/pip install scons==4 \
     && . /opt/venv/bin/activate \
     && PYTHON=/usr/bin/python3.10 PYTHON_CONFIG=/usr/bin/python3.10-config \
        scons build/RISCV/gem5.opt -j"${GEM5_JOBS}" \
-    # keep only the final binary: drops ~3 GB of object files
+    # keep only the final binary, stripped of debug info (483 MB -> ~28 MB)
+    && strip build/RISCV/gem5.opt \
     && mv build/RISCV/gem5.opt /opt/gem5.opt && rm -rf build && mkdir -p build/RISCV \
     && mv /opt/gem5.opt build/RISCV/gem5.opt
 
@@ -68,7 +82,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmpc3 libmpfr6 libgmp10 libexpat1 zlib1g libprotobuf23 libgoogle-perftools4 \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory '*'
-COPY --from=toolchain-build /opt/riscv /opt/riscv
+# Several small layers (instead of one huge one): on a flaky connection Docker restarts only
+# the layer that failed.
+COPY --from=toolchain-build /opt/riscv/bin /opt/riscv/bin
+COPY --from=toolchain-build /opt/riscv/libexec /opt/riscv/libexec
+COPY --from=toolchain-build /opt/riscv/riscv64-unknown-elf /opt/riscv/riscv64-unknown-elf
+COPY --from=toolchain-build /opt/riscv/lib /opt/riscv/lib
+COPY --from=toolchain-build /opt/riscv/share /opt/riscv/share
+COPY --from=toolchain-build /opt/riscv/include /opt/riscv/include
 COPY --from=gem5-build /opt/gem5 /opt/gem5
 # setup_default of the simulator repo honours these overrides (note the trailing slashes)
 ENV RISCV_TOOLCHAIN_PATH=/opt/riscv/bin \
@@ -77,7 +98,7 @@ ENV RISCV_TOOLCHAIN_PATH=/opt/riscv/bin \
     HOME=/tmp
 COPY docker/ase-sim docker/ase-studio /usr/local/bin/
 RUN chmod +x /usr/local/bin/ase-sim /usr/local/bin/ase-studio \
-    && /opt/gem5/build/RISCV/gem5.opt --version | head -1 \
-    && /opt/riscv/bin/riscv64-unknown-elf-gcc --version | head -1
+    && /opt/gem5/build/RISCV/gem5.opt --help >/dev/null \
+    && /opt/riscv/bin/riscv64-unknown-elf-gcc --version >/dev/null
 # The simulator repository (with its ase_studio submodule) is mounted here.
 WORKDIR /work

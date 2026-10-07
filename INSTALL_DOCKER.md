@@ -40,7 +40,7 @@ The `--recurse-submodules` option also downloads ASE Studio. If you forgot it, r
 ### 3a. Download the ready-made image (automatic, recommended)
 
 Nothing to do: the first time you run `./studio.sh` or `./sim.sh`, the scripts download
-`ghcr.io/sanazsafaei/ase-riscv-gem5:latest` (about 2 GB). The right build for your computer
+`ghcr.io/sanazsafaei/ase-riscv-gem5:latest` (a few hundred MB). The right build for your computer
 (Intel/AMD or Apple Silicon) is picked automatically. You can also fetch it ahead of time:
 
 ```bash
